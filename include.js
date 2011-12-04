@@ -112,7 +112,7 @@ var INCLUDE = (function () {
                     var j  = 0,
                         jl = included.length,
                         ii = -1;
-                        included[k] = true;
+                    included[k] = true;
                     while (j < jl) {
                         if (included[j] === false) {
                             ii = j;
@@ -135,24 +135,26 @@ var INCLUDE = (function () {
 // If the script has already been included, fire the allClear method.
             if (meta.status === statusOK) {
                 that.allClear();
-            }
-
-            if (meta.requires) {
-
-                il = meta.requires.length;
-                while (i < il) {
-                    included[i] = false;
-                    i += 1;
-                }
-
-                i = 0;
-                while (i < il) {
-                    getAll(i);
-                    i += 1;
-                }
 
             } else {
-                that.addScript();
+
+                if (meta.requires) {
+
+                    il = meta.requires.length;
+                    while (i < il) {
+                        included[i] = false;
+                        i += 1;
+                    }
+
+                    i = 0;
+                    while (i < il) {
+                        getAll(i);
+                        i += 1;
+                    }
+
+                } else {
+                    that.addScript();
+                }
             }
 
         },
