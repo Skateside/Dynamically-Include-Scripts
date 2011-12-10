@@ -6,33 +6,87 @@ var INCLUDE = (function () {
         scripts = {},
 
         statusNot = 'unrequested',
-        //statusReq = 'requesting', // NOTE TO SELF: will I ever need this?
+        statusReq = 'requesting',
         statusOK  = 'ok',
         statusOut = 'timeout',
 
         allScripts = document.getElementsByTagName('script'),
         lastScript = allScripts[allScripts.length - 1],
 
-        toString = Object.prototype.toString;
+        toString = Object.prototype.toString,
 
+// Below are two workarounds for useful Array methods. These work arounds do
+// not do everything that a native implimentation should, so we declare them as
+// variables rather than globally adding incomplete fixes.
+        forEach = Array.prototype.forEach || function (func) {
+            var i  = 0,
+                il = this.length;
+            while (i < il) {
+                if (this[i] !== undef) {
+                    func.call(undef, this[i], i, this);
+                }
+                i += 1;
+            }
+        },
+        indexOf = Array.prototype.indexOf || function (search) {
+            var i  = 0,
+                il = this.length,
+                ii = -1;
+            while (i < il) {
+                if (this[i] === search) {
+                    ii = i;
+                    break;
+                }
+                i += 1;
+            }
+            return ii;
+        };
+
+    function isArray(obj) {
+        return toString.call(obj) === '[object Array]';
+    }
+
+    function isFunction(obj) {
+        return toString.call(obj) === '[object Function]';
+    }
+    
+    function isString(obj) {
+        return toString.call(obj) === '[object String]';
+    }
+
+// The addScript function adds the script to the meta data, including all
+// requirements. It filters out requirements that aren't strings so that we
+// stand a fighting chance of adding those paths to the DOM. It will also go
+// through each of the filtered requirements and set up meta data for those
+// scripts, if they haven't already been created. Internally it returns the
+// meta data for the script it has just created.
+// This function may be accessed through INCLUDE.add() with the same arguments
+// but it does not return the meta data.
+// Arguments:
+//      path (string) The path of the script to be added.
+//      requires (string | array) [optional] The path(s) for the script's
+//          requirements. Arrays are filtered so they can only include strings.
     function addScript(path, requires) {
 
         var i      = 0,
             il     = 0,
             reqs   = [],
             script = {
-                status: statusNot
+                status: statusNot,
+                callbacks: []
             };
 
 // Before we go any further, we should check that the script in question hasn't
 // already been added to the meta data.
         if (!scripts.hasOwnProperty(path)) {
 
-// A script may not have any requirements so the argument may be undefined.    
-            if (requires !== undef) {
+// A script may not have any requirements so the argument may be undefined.
+// However, this script may be getting called by Array.forEach, so check that
+// requires isn't a number.
+            if (requires !== undef && isNaN(requires)) {
 
 // Force requires to be an array.
-                if (toString.call(requires) !== '[object Array]') {
+                if (!isArray(requires)) {
                     requires = [requires];
                 }
 
@@ -40,14 +94,14 @@ var INCLUDE = (function () {
 // If we can use the faster Array.filter then we should.
                 if (requires.filter) {
                     requires = requires.filter(function (req) {
-                        return toString.call(req) === '[object String]';
+                        return isString(req);
                     });
 
 // If Array.filter isn't available, do it manually.
                 } else {
                     il = requires.length;
                     while (i < il) {
-                        if (toString.call(requires[i]) === '[object String]') {
+                        if (isString(requires[i])) {
                             reqs.push(requires[i]);
                         }
                         i += 1;
@@ -56,6 +110,11 @@ var INCLUDE = (function () {
                 }
 
                 script.requires = requires;
+
+// Go through each of the requirements to see if they need adding to our meta
+// data.
+                forEach.call(requires, addScript);
+
             }
 
 // Add the meta data to the list.
@@ -68,11 +127,19 @@ var INCLUDE = (function () {
     }
 
 
+// The Script constructor is the main powerhouse of this script. It sets up the
+// script inclusion and fires the callback when all the scripts have been
+// loaded.
+// This function may be accessed using INCLUDE().
+// Arguments:
+//      path (string) The absolute path of the script to include.
+//      callback (function) The callback to execute when this script and all of
+//          it's requirements have been included.
     function Script(path, callback) {
 
         var that = this;
 
-// All we need to do is cache the arguments and get the meta data.    
+// All we need to do is cache the arguments and get any meta data.    
         that.path     = path;
         that.meta     = scripts[path];
         that.callback = callback;
@@ -92,52 +159,52 @@ var INCLUDE = (function () {
                 i = 0,
                 il = 0,
                 included = [],
+
+// Simply set the an entry of included to true at the index given. If there are
+// no more entries of false, fire the addScript property to include our script.
                 allIn = function (k) {
                     included[k] = true;
-                    if (included.indexOf(false) < 0) {
+                    if (indexOf.call(included, false) < 0) {
                         that.addScript();
                     }
                 },
+
+// This simply creates a closure for the index we get through a loop so we can
+// call allIn using the correct index.
                 getAll = function (k) {
                     return new Script(meta.requires[k], function () {
                         allIn(k);
                     });
                 };
 
-// Using Array.indexOf is faster and neater, but not every browser understands
-// it. If this is one of those browsers, the allIn function needs to take that
-// into account.
-            if (!Array.prototype.indexOf) {
-                allIn = function (k) {
-                    var j  = 0,
-                        jl = included.length,
-                        ii = -1;
-                    included[k] = true;
-                    while (j < jl) {
-                        if (included[j] === false) {
-                            ii = j;
-                            break;
-                        }
-                        j += 1;
-                    }
-                    if (ii < 0) {
-                        that.addScript();
-                    }
-                };
-            }
 
 // If we try to include a script that hasn't been properly added, add it now.
             if (meta === undef) {
-                that.meta = addScript(that.path, that.callback);
+                that.meta = addScript(that.path);
+                //that.meta = addScript(that.path, that.callback);
                 meta = that.meta;
             }
+
+// Add the current callback to any list of callbacks for this script. This
+// allows us to jump on-board the callbacks of a script that's currently being
+// included.
+            that.meta.callbacks.push(that.callback);
 
 // If the script has already been included, fire the allClear method.
             if (meta.status === statusOK) {
                 that.allClear();
 
-            } else {
+// Don't do anything else if this script is currently being included. We've
+// already added the instance of allIn to the list of callbacks, that will be
+// fired when this script has loaded.
+            } else if (meta.status !== statusReq) {
 
+// If we have any requirements, we need to go and get them all before we can
+// include our script. Since there may be many, we create an array the same
+// size as our requirements and fill it with false. We set each each index of
+// that array to true as we can confirm that the requirement has been added.
+// When we have removed all the false entries, we know it's safe to add our 
+// own script.
                 if (meta.requires) {
 
                     il = meta.requires.length;
@@ -152,6 +219,7 @@ var INCLUDE = (function () {
                         i += 1;
                     }
 
+// No requirements? No problem! We can add our script with impunity.
                 } else {
                     that.addScript();
                 }
@@ -166,6 +234,8 @@ var INCLUDE = (function () {
 
             var that = this,
                 scriptElem = document.createElement('script');
+
+            scripts[that.path].status = statusReq;
 
             scriptElem.type = 'text\/javascript';
 
@@ -186,17 +256,31 @@ var INCLUDE = (function () {
 
             scriptElem.src = that.path;
             lastScript.parentNode.insertBefore(scriptElem, lastScript);
+            
         },
 
+// The allClear method sets the status of the script to acknowledge that it's
+// fine and fires all the callbacks that we have logged.
         allClear: function () {
             scripts[this.path].status = statusOK;
-            this.callback();
+            //this.callback();
+            forEach.call(scripts[this.path].callbacks, function (func) {
+                func();
+            });
         }
     };
 
 
 // Expose the script inclusion and registry.
-    function include(path, callback) {
+    function include(path, requires, callback) {
+
+// Allow the function to add requirements if needed or simply add the script.
+        if (callback === undef && isFunction(requires)) {
+            callback = requires;
+        } else {
+            addScript(path, required);
+        }
+    
         return new Script(path, callback);
     }
 
