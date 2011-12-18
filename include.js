@@ -15,9 +15,9 @@ var INCLUDE = (function () {
 
         toString = Object.prototype.toString,
 
-// Below are two workarounds for useful Array methods. These work arounds do
+// Below are three workarounds for useful Array methods. These work arounds do
 // not do everything that a native implimentation should, so we declare them as
-// variables rather than globally adding incomplete fixes.
+// local variables rather than globally adding incomplete fixes.
         forEach = Array.prototype.forEach || function (func) {
             var i  = 0,
                 il = this.length;
@@ -27,6 +27,15 @@ var INCLUDE = (function () {
                 }
                 i += 1;
             }
+        },
+        filter = Array.prototype.filter || function (func) {
+            var filtered = [];
+            forEach.call(this, function (ent) {
+                if (func.apply(undef, arguments)) {
+                    filtered.push(ent);
+                }
+            });
+            return filtered;
         },
         indexOf = Array.prototype.indexOf || function (search) {
             var i  = 0,
@@ -85,30 +94,17 @@ var INCLUDE = (function () {
 // requires isn't a number.
             if (requires !== undef && isNaN(requires)) {
 
-// Force requires to be an array.
+// Filter out all requirements that aren't strings. For the sake of code
+// consistency, we should ensure that requires is an array first. When we're
+// done, we add the filtered requirements to the meta data.
                 if (!isArray(requires)) {
                     requires = [requires];
                 }
 
-// Filter out all requirements that aren't strings.
-// If we can use the faster Array.filter then we should.
-                if (requires.filter) {
-                    requires = requires.filter(function (req) {
-                        return isString(req);
-                    });
-
-// If Array.filter isn't available, do it manually.
-                } else {
-                    il = requires.length;
-                    while (i < il) {
-                        if (isString(requires[i])) {
-                            reqs.push(requires[i]);
-                        }
-                        i += 1;
-                    }
-                    requires = reqs;
-                }
-
+                requires = filter.call(requires, function (req) {
+                    return isString(req);
+                });
+                
                 script.requires = requires;
 
 // Go through each of the requirements to see if they need adding to our meta
@@ -136,7 +132,7 @@ var INCLUDE = (function () {
 //      callback (function) The callback to execute when this script and all of
 //          it's requirements have been included.
     function Script(path, callback) {
-
+//console.log('new Script for "' + path + '"');
         var that = this;
 
 // All we need to do is cache the arguments and get any meta data.    
@@ -164,6 +160,7 @@ var INCLUDE = (function () {
 // no more entries of false, fire the addScript property to include our script.
                 allIn = function (k) {
                     included[k] = true;
+                    
                     if (indexOf.call(included, false) < 0) {
                         that.addScript();
                     }
@@ -173,6 +170,7 @@ var INCLUDE = (function () {
 // call allIn using the correct index.
                 getAll = function (k) {
                     return new Script(meta.requires[k], function () {
+                    //console.log('allIn with k of "' + k + '"');
                         allIn(k);
                     });
                 };
@@ -181,7 +179,6 @@ var INCLUDE = (function () {
 // If we try to include a script that hasn't been properly added, add it now.
             if (meta === undef) {
                 that.meta = addScript(that.path);
-                //that.meta = addScript(that.path, that.callback);
                 meta = that.meta;
             }
 
@@ -231,40 +228,65 @@ var INCLUDE = (function () {
 // -> throw an error on timeout?
 // -> send some kind of status to the callback so we can check for success?
         addScript: function () {
-
+/*console.log('adding script for "' + this.path + '"');
             var that = this,
                 scriptElem = document.createElement('script');
 
             scripts[that.path].status = statusReq;
 
             scriptElem.type = 'text\/javascript';
+            scriptElem.src = that.path;
 
-            if (scriptElem.onreadystate) {
-                scriptElem.onreadystate = function () {
-                    if (scriptElem.readyState === 'complete'
-                            || scriptElem.readyState === 'loaded') {
-                        scriptElem.onreadystate = null;
+            if (scriptElem.onreadystatechange) {
+                scriptElem.onreadystatechange = function () {
+                    if (this.readyState === 'complete'
+                            || this.readyState === 'loaded') {
+                        this.onreadystatechange = null;
                         that.allClear();
                     }
                 };
             } else {
+console.log('default to onload event');
                 scriptElem.onload = function () {
-                    scriptElem.onload = null;
+console.log('firing onload for "' + that.path + '"');
+                    this.onload = null;
                     that.allClear();
                 };
             }
 
-            scriptElem.src = that.path;
-            lastScript.parentNode.insertBefore(scriptElem, lastScript);
-            
+            var head = document.getElementsByTagName('head')[0] || document.documentElement;
+            head.insertBefore(scriptElem, head.firstChild);
+            //lastScript.parentNode.insertBefore(scriptElem, lastScript);*/
+
+            var that = this,
+                head = document.getElementsByTagName('head')[0]
+                    || document.documentElement,
+                script = document.createElement('script'),
+                done = false;
+            scripts[that.path].status = statusReq;
+            script.type = 'text\/javascript';
+            script.src = that.path;
+            script.onload = script.onreadystatechange = function () {
+                if (!done && (!this.readyState || this.readyState === 'loaded'
+                        || this.readystate === 'complete')) {
+                    done = true;
+                    script.onload = script.onreadystatechange = null;
+                    if (head && script.parentNode) {
+                        head.removeChild(script);
+                    }
+                    that.allClear();
+                }
+            };
+            head.insertBefore(script, head.firstChild);
         },
 
 // The allClear method sets the status of the script to acknowledge that it's
 // fine and fires all the callbacks that we have logged.
         allClear: function () {
+//console.log('allClear for "' + this.path + '" (' + scripts[this.path].callbacks.length + ' callbacks)');
             scripts[this.path].status = statusOK;
-            //this.callback();
             forEach.call(scripts[this.path].callbacks, function (func) {
+//console.log(func.toString());
                 func();
             });
         }
