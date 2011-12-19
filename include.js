@@ -98,9 +98,6 @@ var INCLUDE = (function () {
                     requires = [requires];
                 }
 
-                //requires = filter.call(requires, function (req) {
-                //    return isString(req);
-                //});
                 requires = filter.call(requires, isString);
 
                 script.requires = requires;
@@ -167,7 +164,6 @@ var INCLUDE = (function () {
 // call allIn using the correct index.
                 getAll = function (k) {
                     return new Script(meta.requires[k], function () {
-                    //console.log('allIn with k of "' + k + '"');
                         allIn(k);
                     });
                 };
