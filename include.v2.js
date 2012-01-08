@@ -247,7 +247,9 @@ var INCLUDE = (function () {
 // include.roundUp - finds all SCRIPT tags currently on the page and adds them
 // to the meta data with a status of 3.
             roundUp: function () {
-                var scripts = toArray(document.getElementsByTagName('script'));
+                var scripts = array.toArray(
+                    document.getElementsByTagName('script')
+                );
                 array.forEach(scripts, function (script) {
                     meta.add(script.src, 'status', 3);
                 });
