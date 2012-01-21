@@ -55,17 +55,59 @@ var INCLUDE = (function () {
 
 // Helper functions for manipulating strings.
         string = {
-            ucFirst: function (str) {
-                var letters = str.split(''),
-                    newStr  = letters[0].toUpperCase() +
-                        letters.slice(1).join('').toLowerCase();
-                return newStr;
+            reverse: function (str) {
+                return str.split('').reverse().join('');
+            }
+        },
+
+// Functions for manipulating paths.
+        url = {
+
+// url.location gets the current folder of this file. As a JavaScript file is
+// brought into a page, window.location refers to that page.
+            location: function () {
+                var loc = decodeURI(window.location.href).split('\/');
+                loc.pop();
+                return encodeURI(loc.join('\/'));
             },
-            normalisePath: function (str) {
-// In the future this will do something more useful with window.location.
-// Remember that window.location is the location of the HTML page including
-// this script!
-                return str.toLowerCase();
+
+// url.dropSame simply removes all instances of './' (go to current folder)
+// from the path name without removing '../' (go to parent folder).
+            dropSame: function (p) {
+                var k = string.reverse(p);
+                return string.reverse(k.replace(/\/\.(?!\.)/g, ''));
+            },
+
+// url.removeUp refactors the given path to remove all instances of '../'. It
+// keeps track of the number of times that '../' wound up at the beginning of
+// the URL so we can safely remove folders from the complete path.
+            removeUp: function (p) {
+                var r = [],
+                    n = 0;
+                array.forEach(p.split('\/'), function (f) {
+                    if (f !== '..') {
+                        r.push(f);
+                    } else if (r.pop() === undef) {
+                        n += 1;
+                    }
+                });
+                return [r, n];
+            },
+
+// url.full takes any given path and builds the complete URL.
+            full: function (p) {
+                var loc,
+                    dropped,
+                    removed,
+                    ret = p;
+                if (!(/^(?:https?)|(?:file):\/\//i).test(p)) {
+                    loc = url.location().split('\/');
+                    dropped = url.dropSame(p);
+                    removed = url.removeUp(dropped);
+                    ret = loc.splice(0, loc.length - removed[1]);
+                    ret = ret.concat(removed[0]).join('\/');
+                }
+                return ret;
             }
         },
 
@@ -90,7 +132,7 @@ var INCLUDE = (function () {
 // meta data is created, a callback is added for the script that sets the
 // status to 3.
             create: function (path) {
-                var normal = string.normalisePath(path);
+                var normal = url.full(path);
                 if (!owns(meta.data, normal)) {
                     meta.data[normal] = {
                         callbacks: [function () {
@@ -107,7 +149,7 @@ var INCLUDE = (function () {
 // added, otherwise the info replaces the current data if the types match. If
 // no data is found for the given path, it will be created first.
             add: function (path, property, info) {
-                var normal = string.normalisePath(path),
+                var normal = url.full(path),
                     script;
                 meta.create(normal);
                 script = meta.data[normal];
@@ -126,7 +168,7 @@ var INCLUDE = (function () {
 // no data exists for the given path, or the property is not recognised, this
 // function will return undefined.
             get: function (path, property) {
-                var normal = string.normalisePath(path),
+                var normal = url.full(path),
                     info;
                 if (owns(meta.data, normal)
                         && owns(meta.data[normal], property)) {
@@ -165,7 +207,7 @@ var INCLUDE = (function () {
 // function to execute all the callbacks for the script as the script.create
 // callback. If the callbacks cannot be identified, no action is taken.
             addToDOM: function (path) {
-                var normal = string.normalisePath(path),
+                var normal = url.full(path),
                     callbacks = meta.get(normal, 'callbacks');
                 if (callbacks !== undef) {
                     meta.add(normal, 'status', 2);
