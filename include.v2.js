@@ -205,14 +205,14 @@ var INCLUDE = (function () {
 
 // script.addToDOM - sends the normalised path to script.create and sends a
 // function to execute all the callbacks for the script as the script.create
-// callback. If the callbacks cannot be identified, no action is taken.
+// callback. If the meta data doesn't exist, no action is taken.
             addToDOM: function (path) {
-                var normal = url.full(path),
-                    callbacks = meta.get(normal, 'callbacks');
-                if (callbacks !== undef) {
+                var normal = url.full(path);
+                if (owns(meta.data, normal)) {
                     meta.add(normal, 'status', 2);
-                    callbacks = array.filter(callbacks, is.callable);
                     script.create(normal, function () {
+                        var callbacks = meta.get(normal, 'callbacks');
+                        callbacks = array.filter(callbacks, is.callable);
                         array.forEach(callbacks, function (callback) {
                             callback();
                         });
@@ -318,7 +318,7 @@ var INCLUDE = (function () {
                     requires = [];
                 }
                 meta.create(path);
-                if (requires.length) {
+                if (requires && requires.length) {
                     include.add(path, requires);
                 }
                 script.init(path, callback);
